@@ -1,3 +1,5 @@
 boot.bin
 mbr-backup.bin
+kernel
+kernel-sectors-backup.bin
 
