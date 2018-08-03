@@ -7,8 +7,8 @@
 ; 00500 - 0052f   The Petch Zone :)
 ; 00530 - 07bff   Stack
 ; 07c00 - 07dff   IPL - initial program loader
-; 07e00 - 08dff   Kernel
-; 08e00 - fffff   Free
+; 07e00 - 08bff   Kernel - loaded initially
+; 0bc00 - 0ffff   Free
 
 start:
 	xor ax, ax
@@ -34,7 +34,7 @@ load_kernel:
 	mov es, ax
 	mov bx, 0x7e00 ; read destination ES:BX = 0:7e00h
 	mov ah, 2 ; read operation
-	mov al, 4 ; read 4 sectors
+	mov al, 7 ; read 7 sectors
 	mov ch, 0 ; cylinder 0
 	mov dh, 0 ; head 0
 	mov cl, 2 ; sector 2
@@ -57,7 +57,7 @@ enable_pmode:
 	jz enable_a20
 	mov si, msg_a20_already_enabled
 	call bios_print
-	jmp load_gdt
+	jmp copy_kernel
 
 enable_a20:
 	mov si, msg_enabling_a20
@@ -92,10 +92,22 @@ enable_a20:
 
 	call check_a20
 	test ax, 1
-	jnz load_gdt
+	jnz copy_kernel
 	mov si, msg_failed
 	call bios_print
 	hlt
+
+copy_kernel:
+	xor ax, ax
+	mov ds, ax
+	mov si, 0x7e00
+	mov ax, 0xffff
+	mov es, ax
+	mov di, 0x10 ; es:di = 0xffff:0x10 = 0xffff*0x10 + 0x10 = 1MB
+	mov cx, 0xe00 ; 7 * 512 - 7 sectors of kernel (3584 bytes)
+	rep movsw
+	xor ax, ax
+	mov es, ax
 
 ; now let us load GDT
 load_gdt:
@@ -114,10 +126,17 @@ load_gdt:
         mov cr0, eax ; set PE bit to control register 0 to enable Pmode
 
 ; data segments should point to data selector inside GDT (offset inside GDT is 0x10)
-	mov		ax, 0x10
+	mov		eax, 0x10
 	mov		ds, ax
 	mov		ss, ax
 	mov		es, ax
+
+	; To far jump to kernel code to clear pipe line.
+	; To do it, we need to set offset explicitly.
+	; Offset in 32 bit mode is offset of code_descriptor inside GDT - 0x8 (it is value of CS)
+	; First let's jump to intermediate 32 bit code of bootloader
+	jmp 0x8:PM32
+
 	hlt
 
 bios_print:
@@ -173,14 +192,14 @@ dd	gdt
 
 gdt:
 ; GDT taken from http://www.brokenthorn.com/Resources/OSDev8.html
-; null descriptor 
+null_descriptor:
 	dd 0 				; null descriptor--just fill 8 bytes with zero
 	dd 0 
  
 ; Notice that each descriptor is exactally 8 bytes in size. THIS IS IMPORTANT.
 ; Because of this, the code descriptor has offset 0x8.
  
-; code descriptor:			; code descriptor. Right after null descriptor
+code_descriptor:			; code descriptor. Right after null descriptor
 	dw 0FFFFh 			; limit low
 	dw 0 				; base low
 	db 0 				; base middle
@@ -191,7 +210,7 @@ gdt:
 ; Because each descriptor is 8 bytes in size, the Data descritpor is at offset 0x10 from
 ; the beginning of the GDT, or 16 (decimal) bytes from start.
  
-; data descriptor:			; data descriptor
+data_descriptor:			; data descriptor
 	dw 0FFFFh 			; limit low (Same as code)
 	dw 0 				; base low
 	db 0 				; base middle
@@ -199,6 +218,11 @@ gdt:
 	db 11001111b 			; granularity
 	db 0				; base high
 end_of_gdt:
+
+[BITS 32]
+PM32:
+	; Now far jump to kernel
+	jmp 0x8:0x100000
 
 times 510-($-$$) db 0
 db 0x55
