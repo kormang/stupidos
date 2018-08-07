@@ -4,6 +4,8 @@ VIDEO_MEMORY equ 0xb8000
 VIDEO_MEMORY_SIZE equ 2000 ; 80 * 25
 VIDEO_MEMORY_FOURTH_ROW equ 0xb81e0
 
+section .text
+
 sprint:
 	mov edx, dword [pos]
 	
@@ -28,6 +30,8 @@ clear_screen:
 	rep stosw
 	mov dword [pos], VIDEO_MEMORY
 	ret
+
+section .data
 
 pos dd VIDEO_MEMORY_FOURTH_ROW
 
