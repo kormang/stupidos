@@ -3,8 +3,8 @@
 global isr%1
 isr%1:
 	cli
-	push byte 0 ; dummy error code
-	push byte %1
+	push dword 0 ; dummy error code
+	push dword %1
 	jmp isr_common_stub
 %endmacro
 
@@ -13,7 +13,7 @@ isr%1:
 global isr%1
 isr%1:
 	cli
-	push byte %1
+	push dword %1
 	jmp isr_common_stub
 %endmacro
 

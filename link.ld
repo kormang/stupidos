@@ -7,4 +7,5 @@ SECTIONS
 	.text : { *(.text) }
 	.data : { *(.data) }
 	.bss : { *(.bss) } /* BSS last so it can expand */
+	kernel_end = .;
 }

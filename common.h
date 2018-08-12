@@ -9,4 +9,6 @@ typedef unsigned char  uint8_t;
 typedef signed   char  int8_t;
 typedef uint32_t       size_t;
 
+#define CU32(x) (*((uint32_t*)&x))
+
 #endif
