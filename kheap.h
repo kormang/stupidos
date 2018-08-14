@@ -1,7 +1,7 @@
 #ifndef KHEAP_H
 #define KHEAP_H
 #include "common.h"
-#define ADDITIONAL_KERNEL_HEAP_SIZE 0x10000
+#define ADDITIONAL_KERNEL_HEAP_SIZE 0x100000
 
 extern void* kernel_heap_end;
 
@@ -22,5 +22,7 @@ static inline void* kmalloc_ap(size_t size, void** phys) {
 static inline void* kmalloc(size_t size) {
   return kmalloc_i(size, 0, (void**)0);
 }
+
+void kfree(void* address);
 
 #endif

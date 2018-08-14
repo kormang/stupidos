@@ -1,19 +1,25 @@
 #include "isr.h"
 #include "io.h"
+#include "pic.h"
 #include "screen.h"
 
 static isr_t interrupt_handlers[ISR_COUNT];
 
 void isr_common_handler (registers_t regs) {
-  if (regs.int_no >= 40) { // it is from slave IRQ controller
-    outb(0xA0, 0x20); // reset signal to slave
+  if (regs.int_no >= PIC1_OFFSET_VECTOR) {
+    if (regs.int_no >= PIC2_OFFSET_VECTOR) { // it is from slave IRQ controller
+      outb(0xA0, 0x20); // reset signal to slave
+    }
+    outb(0x20, 0x20); // reset signal to master
   }
-  outb(0x20, 0x20); // reset signal to master
+
   if (regs.int_no < ISR_COUNT && interrupt_handlers[regs.int_no] != 0) {
     interrupt_handlers[regs.int_no](&regs);
   } else {
     screen_print_hex(regs.int_no);
     screen_print(" No handler!\n");
+    __asm__("cli");
+    __asm__("hlt");
   }
 }
 

@@ -22,5 +22,5 @@ section .data
 ;hello_from_kernel_asm db 'Hello from kernel.asm !!!', 0
 
 section .bss
-resb 0x2000
+resb 0x4000
 stack_start:

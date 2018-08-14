@@ -1,5 +1,4 @@
 #include "kheap.h"
-#include "screen.h"
 
 extern uint32_t kernel_end; // defined in link.ld
 void* kernel_heap_end = (void*)0;
@@ -17,4 +16,8 @@ void* kmalloc_i(size_t size, int align, void** phys) {
   void* ret = placement_address;
   placement_address += size;
   return ret;
+}
+
+void kfree(void* address) {
+  // TODO: implement proper heap
 }

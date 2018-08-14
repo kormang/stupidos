@@ -24,3 +24,5 @@ Old content of MBR are saved to ./mbr-backup.bin.
 ## Credits
 
 [OSDev wiki](https://wiki.osdev.org/)
+[JamesM' osdev tutorials](http://www.jamesmolloy.co.uk/tutorial_html/9.-Multitasking.html)
+[Intel software developer manual](https://software.intel.com/en-us/articles/intel-sdm)

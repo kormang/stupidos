@@ -58,14 +58,15 @@ typedef union {
 typedef struct {
   pd_entry_t page_tables[1024];
   page_table_t* virt_tables[1024]; // virtual addresses of tables
+  phys_addr_t dir_phys_addr;
 }page_directory_t;
 
 void init_paging();
 
+page_directory_t* clone_directory(page_directory_t* src);
 void switch_page_directory(page_directory_t* pd);
 
-// if make_pt then create page table if necessary
-page_t* get_page(uint32_t address, int make_pt, page_directory_t* pd);
+phys_addr_t alloc_frame();
 
 phys_addr_t virt_to_phys(virt_addr_t virtualaddr);
 void map_page (phys_addr_t physaddr, virt_addr_t virtaddr, uint32_t flags);

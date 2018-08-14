@@ -7,8 +7,8 @@
 ; 00500 - 0052f   The Petch Zone :)
 ; 00530 - 07bff   Stack
 ; 07c00 - 07dff   IPL - initial program loader
-; 07e00 - 09bff   Kernel - loaded initially
-; 09c00 - 0ffff   Free
+; 07e00 - 0bbff   Kernel - loaded initially
+; 0bc00 - 0ffff   Free
 
 start:
 	xor ax, ax
@@ -34,7 +34,7 @@ load_kernel:
 	mov es, ax
 	mov bx, 0x7e00 ; read destination ES:BX = 0:7e00h
 	mov ah, 2 ; read operation
-	mov al, 0xF ; read 15 sectors
+	mov al, 0x1F ; read 31 sectors
 	mov ch, 0 ; cylinder 0
 	mov dh, 0 ; head 0
 	mov cl, 2 ; sector 2

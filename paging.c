@@ -89,7 +89,7 @@ void free_frame(page_t* page) {
 
 void switch_page_directory(page_directory_t* pd) {
   current_directory = pd;
-  __asm__ volatile ("mov %0, %%cr3" : : "r"(pd));
+  __asm__ volatile ("mov %0, %%cr3" : : "r"(pd->dir_phys_addr));
   uint32_t cr0;
   __asm__ volatile ("mov %%cr0, %0": "=r"(cr0):);
   cr0 |= 0x80000000;
@@ -120,7 +120,7 @@ void page_fault(registers_t* regs) {
 
 extern void copy_frame(phys_addr_t src, phys_addr_t dst);
 
-static page_table_t* clone_table(page_table_t* src, phys_addr_t physaddr) {
+static page_table_t* clone_table(page_table_t* src, phys_addr_t* physaddr) {
   page_table_t* clone = (page_table_t*)kmalloc_ap(sizeof(page_table_t), physaddr);
   memset(clone, 0, sizeof(page_table_t));
   int i;
@@ -145,11 +145,14 @@ page_directory_t* clone_directory(page_directory_t* src) {
 
   memset(clone, 0, sizeof(page_directory_t));
 
+  clone->dir_phys_addr = phys;
+
   int i;
   for(i = 0; i < 1024; ++i) {
     if (!src->virt_tables[i]) {
       continue;
     }
+    // if table belongs to kernel, just link it
     if (kernel_directory->virt_tables[i] == src->virt_tables[i]) {
       // just link kernel tables
       clone->virt_tables[i] = src->virt_tables[i];
@@ -161,30 +164,28 @@ page_directory_t* clone_directory(page_directory_t* src) {
       clone->page_tables[i].page_table_addr = (uint32_t)phys >> 12;
     }
   }
+
   return clone;
 }
 
 void init_paging() {
-  uint32_t mem_end_page = 0x1000000; // 16 MB
+  uint32_t mem_end_page = 0x8000000; // 128 MB
   frames_count = mem_end_page >> 12;
   frames = kmalloc_a(INDEX_FROM_BIT(frames_count));
   memset(frames, 0, INDEX_FROM_BIT(frames_count));
   kernel_directory = (page_directory_t*)kmalloc_a(sizeof(page_directory_t));
 
   memset(kernel_directory, 0, sizeof(page_directory_t));
-  // make directory be in virtual address 00xFFFFF000, by pointing to itself
-  kernel_directory->page_tables[1023].flags = 0x3;
-  kernel_directory->page_tables[1023].page_table_addr = ((uint32_t)kernel_directory) >> 12;
+  kernel_directory->dir_phys_addr = kernel_directory;
 
   // identity map kernel so it can continue to work from base 0x100000
-  uint32_t flags = 0x3;
+  uint32_t flags = 0x3; // Kernel code is readable but not writeable from userspace.
   phys_addr_t physaddr = 0;
   while (physaddr < placement_address + ADDITIONAL_KERNEL_HEAP_SIZE) {
-    // Kernel code is readable but not writeable from userspace.
     physaddr = alloc_frame();
     map_page_in_dir(physaddr, (virt_addr_t)physaddr, flags, kernel_directory);
   }
-
+  kmalloc_a(0); // align placement_address
   kernel_heap_end = (void*)(placement_address + ADDITIONAL_KERNEL_HEAP_SIZE);
 
   register_interrupt_handler(14, &page_fault);
@@ -197,7 +198,7 @@ void init_paging() {
 
 phys_addr_t virt_to_phys(virt_addr_t virtaddr) {
   virt_addr_struct_t vs = { .addr = virtaddr };
-  page_directory_t* pd = (page_directory_t*)0xFFFFF000;
+  page_directory_t* pd = current_directory;
   pd_entry_t* pde = &pd->page_tables[vs.pd_index];
   if (pde->present) {
     page_t* pte = &pd->virt_tables[vs.pd_index]->pages[vs.pt_index];
@@ -237,7 +238,6 @@ void map_page_in_dir (
 
 // used after paging is initialized
 void map_page (phys_addr_t physaddr, virt_addr_t virtaddr, uint32_t flags) {
-  page_directory_t* pd = (page_directory_t*)0xFFFFF000;
-  map_page_in_dir(physaddr, virtaddr, flags, pd);
+  map_page_in_dir(physaddr, virtaddr, flags, current_directory);
   __asm__ volatile ("invlpg (%0)" ::"r" (virtaddr) : "memory");
 }

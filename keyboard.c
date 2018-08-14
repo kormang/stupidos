@@ -77,7 +77,7 @@ static void keyboard_handler(registers_t* regs)
 
 void init_keyboard () {
   uint16_t mask;
-  register_interrupt_handler(PIC1_OFFSET_VECTOR + 1, &keyboard_handler);
+  register_interrupt_handler(IRQ(1), &keyboard_handler);
   mask = inb(PIC1_DATA);
   mask = mask & 0xFD; // enable IRQ 1
   outb(PIC1_DATA, mask);

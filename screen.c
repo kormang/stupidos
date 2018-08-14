@@ -1,8 +1,8 @@
 #include "screen.h"
 #include "io.h"
 
-static uint8_t currentRow = 0;
-static uint8_t currentColumn = 0;
+static volatile uint8_t currentRow = 0;
+static volatile uint8_t currentColumn = 0;
 static char* const video_memory = (char*)0xb8000;
 
 void screen_set_cursor (uint8_t row, uint8_t column) {
@@ -47,37 +47,38 @@ static void scroll(uint8_t row) {
 }
 
 void screen_put_char(const char c) {
-  uint8_t row = currentRow;
-  uint8_t column = currentColumn;
+  __asm__ volatile ("pushf"); // save eflags
+  __asm__ volatile ("cli"); // clear interrupts flag to make printing char atomic
 
   if (c == '\r') {
-    column = 0;
+    currentColumn = 0;
   } else if (c == '\n') {
-    row++;
-    column = 0;
-  } else if (c == 0x8 && column > 0) { // backspace
-    column--;
+    currentRow++;
+    currentColumn = 0;
+  } else if (c == 0x8 && currentColumn > 0) { // backspace
+    currentColumn--;
   } else if (c == '\t') {
-    column = (column + 8) & ~7;
+    currentColumn = (currentColumn + 8) & ~7;
   } else if (c >= ' ') {
-    const size_t pos = (row*80 + column) * 2;
+    const size_t pos = (currentRow*80 + currentColumn) * 2;
     video_memory[pos] = c;
     video_memory[pos+1] = COLOR_CODE;
-    column++;
+    currentColumn++;
   }
 
-  if (column >= 80) {
-    column = 0;
-    row++;
+  if (currentColumn >= 80) {
+    currentColumn = 0;
+    currentRow++;
   }
 
-  scroll(row);
+  scroll(currentRow);
 
-  if (row >= 25) {
-    row = 24;
+  if (currentRow >= 25) {
+    currentRow = 24;
   }
 
-  screen_set_cursor(row, column);
+  screen_set_cursor(currentRow, currentColumn);
+  __asm__ volatile ("popf"); // restore eflags
 }
 
 void screen_print (const char* const str) {

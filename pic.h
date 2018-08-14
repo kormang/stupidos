@@ -10,6 +10,8 @@
 #define PIC1_OFFSET_VECTOR 0x20
 #define PIC2_OFFSET_VECTOR 0x28
 
+#define IRQ(n) (PIC1_OFFSET_VECTOR + n)
+
 void pic_remap();
 
 #endif
