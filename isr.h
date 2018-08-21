@@ -15,10 +15,14 @@
 // represent registers pushed by jump to ISR code (assembly0)
 typedef struct registers
 {
+   // offset: 0
    uint32_t ds;                  // Data segment selector
-   uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by pusha.
+   // offset: 4,  8,  12,  16,      20,  24,  28,  32
+   uint32_t edi, esi, ebp, isr_esp, ebx, edx, ecx, eax; // Pushed by pusha.
+   // offset: 36,   40
    uint32_t int_no, err_code;    // Interrupt number and error code (if applicable)
-   uint32_t eip, cs, eflags, useresp, ss; // Pushed by the processor automatically.
+   // offset: 44, 48, 52,    56,       60
+   uint32_t eip, cs, eflags, prev_esp, ss; // Pushed by the processor automatically.
 } registers_t;
 
 typedef void (*isr_t)(registers_t*);

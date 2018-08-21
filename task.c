@@ -16,15 +16,12 @@ volatile task_t* ready_queue;
 volatile task_t* ready_queue_end;
 
 volatile task_t* next_task;
-volatile page_directory_t* next_directory;
-phys_addr_t next_task_dir_phys_addr;
-uint32_t next_task_esp;
 
 extern page_directory_t *kernel_directory;
 extern page_directory_t *current_directory;
 
 extern int read_eip();
-extern void switch_task_dispatched();
+extern uint32_t kernel_dispatcher_stack_start;
 
 uint32_t next_pid = 1;
 virt_addr_t process_stack_start = (virt_addr_t)0;
@@ -41,34 +38,76 @@ static virt_addr_t alloc_process_stack() {
   return process_stack_start;
 }
 
-void init_tasking() {
-  __asm__ volatile ("cli");
+static registers_t switch_task_dispatcher_regs;
+static void switch_task_dispatcher() {
+  extern void switch_task_dispatched_to_user(phys_addr_t next_dir, registers_t regs);
+  extern void switch_task_dispatched_kernel(phys_addr_t next_dir, registers_t* regs);
 
+  __asm__ volatile ("cli");
+  // ensure we run on dispatcher stack
+  __asm__ volatile ("mov %0, %%esp" :: "r"(&kernel_dispatcher_stack_start) : "esp");
+
+  current_task = next_task;
+  current_directory = next_task->page_directory;
+
+  if (next_task->registers.cs == 0x1B) {
+    switch_task_dispatched_to_user(current_directory->dir_phys_addr, current_task->registers);
+  } else {
+    switch_task_dispatched_kernel(current_directory->dir_phys_addr, (registers_t*)&current_task->registers);
+  }
+}
+
+void init_tasking() {
   current_task = ready_queue = ready_queue_end = (task_t*)kmalloc(sizeof(task_t));
   current_task->id = next_pid++;
   memset((void*)&current_task->registers, 0, sizeof(registers_t));
   current_task->page_directory = current_directory;
   current_task->next = 0;
+  current_task->registers.cs = 0x8; // kernel code
+  current_task->registers.ss = 0x10; // kernel data
+  current_task->registers.ds = 0x10; // kernel data
 
   process_stack_start = alloc_process_stack();
 
-  __asm__ volatile ("sti");
+
+  // initialize switch_task_dispatcher_regs
+  memset(&switch_task_dispatcher_regs, 0, sizeof(registers_t));
+  switch_task_dispatcher_regs.prev_esp = (uint32_t)&kernel_dispatcher_stack_start;
+  switch_task_dispatcher_regs.eip = (uint32_t)&switch_task_dispatcher;
+  switch_task_dispatcher_regs.cs = 0x8; // kernel code
+  switch_task_dispatcher_regs.ss = 0x10; // kernel data
+  switch_task_dispatcher_regs.ds = 0x10; // kernel data
+  __asm__ volatile (
+    "pushf \n"
+    "pop %%ecx \n"
+    "mov %%ecx, %0 \n"
+    :
+    "=r"(switch_task_dispatcher_regs.eflags)
+    ::
+    "ecx"
+  );
+  // other fields are not important
+}
+
+void kernel_idle_task() {
+  screen_print("Starting kernel idle loop.");
+  for(;;){}
 }
 
 int process_main() {
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 5; i++) {
 		screen_print("Hello from another process!!!");
 		screen_print("This is multitasking demo!!! This is one process!!!\n");
 	}
+
+  switch_to_user_mode();
+
+  for (;;){}
   return 0x1; // error code
 }
 
 static void set_next_task(task_t* ntask) {
   next_task = ntask;
-  // help for switch_task_dispatched assemby code
-  next_directory = next_task->page_directory;
-  next_task_dir_phys_addr = next_directory->dir_phys_addr;
-  next_task_esp = next_task->registers.esp;
 }
 
 static task_t* find_next_task(task_t* current_task) {
@@ -114,7 +153,7 @@ void on_task_returned() {
     set_next_task(find_next_task(tmp));
     kfree(tmp);
     screen_print("process is finished\n");
-    switch_task_dispatched();
+    // TODO: switch to another task
   } else {
     // this should not happen
     screen_print("Task finished but wasn't in list.\n");
@@ -123,6 +162,7 @@ void on_task_returned() {
 }
 
 int fork() {
+  __asm__ volatile ("pushf");
   __asm__ volatile ("cli");
   uint32_t eip;
   task_t* new_task;
@@ -141,6 +181,11 @@ int fork() {
     : "=m"(new_task->registers.eflags)
   );
 
+  new_task->registers.eflags |= 0x200; // set I flag upon wakeup
+  new_task->registers.ds = current_task->registers.ds;
+  new_task->registers.ss = current_task->registers.ss;
+  new_task->registers.cs = current_task->registers.cs;
+
   // so we setup registers for new task, which will eventually be woken up
   // at eip with these values of registers
   __asm__ volatile (
@@ -148,7 +193,7 @@ int fork() {
     "mov %%edi, 0(%%eax) \n"
     "mov %%esi, 4(%%eax) \n"
     "mov %%ebp, 8(%%eax) \n"
-    "mov %%esp, 12(%%eax) \n"
+    "mov %%esp, 52(%%eax) \n" // we need prev_esp
     "mov %%ebx, 16(%%eax) \n"
     "mov %%edx, 20(%%eax) \n"
     "mov %%ecx, 24(%%eax) \n"
@@ -165,8 +210,7 @@ int fork() {
     ready_queue_end->next = new_task;
     ready_queue_end = new_task;
 
-    __asm__ volatile ("sti");
-
+    __asm__ volatile ("popf");
     return new_task->id;
   } else {
     return 0; // when we return to child from fork we return 0
@@ -184,16 +228,30 @@ void switch_task_from_isr(registers_t* interrupted_task_regs) {
 
   current_task->registers = *interrupted_task_regs;
 
+  if (current_task->registers.cs != 0x1B) {
+    // kernel task interrupted
+
+    // in this case prev_esp is not pushed automatically
+    // we need to set prev_esp to saved isr_esp + some offset
+    current_task->registers.prev_esp
+      = current_task->registers.isr_esp
+      + ( member_offset(registers_t, prev_esp) - member_offset(registers_t, int_no) );
+  }
+
   set_next_task(find_next_task((task_t*)current_task));
 
-  interrupted_task_regs->eip = (uint32_t)&switch_task_dispatched;
+  interrupted_task_regs->eip = switch_task_dispatcher_regs.eip;
+  interrupted_task_regs->eflags = switch_task_dispatcher_regs.eflags;
+
+  if (current_task->registers.cs == 0x1B) {
+    // user task is interrupted
+    interrupted_task_regs->cs = switch_task_dispatcher_regs.cs;
+    interrupted_task_regs->ds = switch_task_dispatcher_regs.ds;
+    interrupted_task_regs->ss = switch_task_dispatcher_regs.ss;
+    interrupted_task_regs->prev_esp = switch_task_dispatcher_regs.prev_esp;
+  }
   // exit quickly from ISR, but continue with the job in switch_task_dispatched
   return;
-}
-
-void switch_task() {
-  set_next_task(find_next_task((task_t*)current_task));
-  switch_task_dispatched();
 }
 
 int getpid() {

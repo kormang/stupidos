@@ -71,6 +71,7 @@ ISR 47
 extern isr_common_handler
 isr_common_stub:
 	pusha ; all registers: edi,esi,ebp,esp,ebx,edx,ecx,eax
+	xor eax, eax
 	mov ax, ds
 	push eax
 

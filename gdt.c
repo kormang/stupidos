@@ -19,7 +19,7 @@ static void gdt_set_entry(int idx, uint32_t base, uint32_t limit, uint8_t access
    gdt_entries[idx].access      = access;
 }
 
-static void write_tss(int idx, uint16_t ss0, uint16_t esp0) {
+static void write_tss(int idx, uint32_t ss0, uint32_t esp0) {
   uint32_t base = (uint32_t)&tss_entry;
   uint32_t limit = base + sizeof(tss_entry);
   gdt_set_entry(idx, base, limit, 0xE9, 0x00);
@@ -31,10 +31,6 @@ static void write_tss(int idx, uint16_t ss0, uint16_t esp0) {
   tss_entry.cs = 0x08 | 0x3; // kernel code segment switchable to from ring 3
   tss_entry.ss = tss_entry.ds =
     tss_entry.es = tss_entry.fs = tss_entry.gs = 0x10 | 0x3;
-}
-
-void set_kernel_stack(uint32_t esp0) {
-  tss_entry.esp0 = esp0;
 }
 
 extern void load_gdtr(gdt_ptr_t*);
@@ -49,7 +45,9 @@ void init_gdt() {
   gdt_set_entry(2, 0, 0xFFFFFFFF, 0x92, 0xCF); // kernel data
   gdt_set_entry(3, 0, 0xFFFFFFFF, 0xFA, 0xCF); // user code
   gdt_set_entry(4, 0, 0xFFFFFFFF, 0xF2, 0xCF); // user data
-  write_tss(5, 0x10, 0); // TSS
+
+  extern uint32_t kernel_stack_start;
+  write_tss(5, 0x10, (uint32_t)&kernel_stack_start); // TSS
 
   load_gdtr(&gdt_ptr);
   load_tr();

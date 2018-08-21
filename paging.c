@@ -179,7 +179,7 @@ void init_paging() {
   kernel_directory->dir_phys_addr = kernel_directory;
 
   // identity map kernel so it can continue to work from base 0x100000
-  uint32_t flags = 0x3; // Kernel code is readable but not writeable from userspace.
+  uint32_t flags = 0x7; // Kernel code is readable but not writeable from userspace.
   phys_addr_t physaddr = 0;
   while (physaddr < placement_address + ADDITIONAL_KERNEL_HEAP_SIZE) {
     physaddr = alloc_frame();

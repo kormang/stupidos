@@ -17,8 +17,4 @@ void init_kernel() {
   init_timer(18);
   init_paging();
   init_tasking();
-
-  __asm__ volatile ("sti");
-
-  start_process();
 }

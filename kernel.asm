@@ -6,7 +6,7 @@ extern kernel_main
 
 start:
 	cli ; it should already be disabled by bootloader, but just in case
-	mov esp, stack_start ;0x10000; at least 15kB of stack after boot loader and initial kernel position
+	mov esp, kernel_stack_start ;0x10000; at least 15kB of stack after boot loader and initial kernel position
 
 ;	mov ebx, hello_from_kernel_asm
 ;	call sprint
@@ -23,4 +23,9 @@ section .data
 
 section .bss
 resb 0x4000
-stack_start:
+global kernel_stack_start
+kernel_stack_start:
+resb 0x4000
+global kernel_dispatcher_stack_start
+kernel_dispatcher_stack_start:
+

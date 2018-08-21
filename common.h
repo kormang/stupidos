@@ -11,4 +11,6 @@ typedef uint32_t       size_t;
 
 #define CU32(x) (*((uint32_t*)&x))
 
+#define member_offset(struct, member) ((size_t)&(((struct*)0)->member))
+
 #endif

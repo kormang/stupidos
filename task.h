@@ -16,7 +16,7 @@ void init_tasking();
 void start_process();
 void switch_task_from_isr(registers_t* interrupted_task_regs);
 void schedule_from_timer(registers_t* interrupted_task_regs);
-void switch_task();
+void switch_to_user_mode();
 int fork();
 int get_pid();
 

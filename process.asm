@@ -10,6 +10,7 @@ extern next_task_dir_phys_addr
 extern next_task_esp
 extern current_task
 extern current_directory
+extern kernel_idle_task
 
 global copy_frame
 
@@ -63,6 +64,14 @@ start_process:
 	je .start_of_process
 	; kernel
 
+	; after kernel forks to first process all that is left is to respond to ISRs
+	; and even if there is something, it can be called from kernel_idle_task
+	call kernel_idle_task
+
+	; kernel_idle_task should never return
+	; we can't really get back to original kernel stack and code
+	; I leave this here only for reference
+	; original kernel stack is probably overwritten by ISRs
 	mov esp, ebx ; restore kernel stack
 
 	pop ebx
@@ -76,49 +85,78 @@ start_process:
 	push on_task_returned
 	jmp process_main
 
-global switch_task_dispatched
-switch_task_dispatched:
-	cli
+global switch_task_dispatched_to_user
+switch_task_dispatched_to_user:
+	; (page_dir_phys_addr, registers)
+	add esp, 4 ; take off return address
 
-	mov eax, [next_task_dir_phys_addr]
+	; we can switch dir because we are on kernel stack, and it is mapped to all dirs
+	pop eax ; take off page dir phys addr
 	mov cr3, eax ; page dir switched
-	mov esp, [next_task_esp] ; stack switched, we're good to go
 
-	mov eax, [next_directory]
-	mov [current_directory], eax
-	mov eax, [next_task]
-	mov [current_task], eax ; now we can say that current_task is next_task
+	pop eax
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
 
-	push dword [eax + 12*4] ; offset of eip in task_t
-	push dword [eax + 13*4] ; offset of eflags in task_t
+	pop edi
+	pop esi
+	pop ebp
+	add esp, 4 ;pop esp
+	pop ebx
+	pop edx
+	pop ecx
+	pop eax
+	add esp, 8 ; intno + errcode
 
-	mov edi, [eax + 2*4]
-	mov esi, [eax + 3*4]
-	mov ebp, [eax + 4*4]
-	mov ebx, [eax + 6*4]
-	mov edx, [eax + 7*4]
-	mov ecx, [eax + 8*4]
-	mov eax, [eax + 9*4]
+	iret
 
-	popf
-	sti
-	ret
+global switch_task_dispatched_kernel
+switch_task_dispatched_kernel:
+	; (page_dir_phys_addr, registers_ptr)
+	mov eax, [esp + 4] ; take off page dir phys addr
+	mov cr3, eax ; page dir switched
+
+	mov eax, [esp + 8] ; eax points to registers, which should be in kernel memory, mapped to all dirs
+
+	; ds should be the same, we're not switching priviledge level
+	; mov ecx, [eax] ; take first field of registers - ds
+	; mov ds, cx
+	; mov es, cx
+	; mov fs, cx
+	; mov gs, cx
+
+	mov edi, [eax + 4]
+	mov esi, [eax + 8]
+	mov ebp, [eax + 12]
+	mov esp, [eax + 56] ; prev_esp
+	mov ebx, [eax + 20]
+	mov edx, [eax + 24]
+	mov ecx, [eax + 28]
+
+	push dword [eax + 44] ; push return address to new stack
+	push dword [eax + 52] ; push eflags
+
+	mov eax, [eax + 32] ; finally restore eax
+
+	popf ; pop eflags from new stack
+	ret ; pop return address and continue with task
 
 global switch_to_user_mode
 switch_to_user_mode:
 	cli
-	;mov ax, 0x23 ; user data segment 0x20 | 0x3 - ring 3
-	;mov ds, ax
-	;mov es, ax
-	;mov fs, ax
-	;mov gs, ax
+	mov ax, 0x23 ; user data segment 0x20 | 0x3 - ring 3
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
 
 	pop ecx ; save return address
 	mov eax, esp ; save stack pointer
-	push 0x10 ; stack segment selector = data segment
+	push dword 0x23 ; stack segment selector = data segment
 	push eax ; restore stack after iret
 	pushf ; eflags
-	push 0x8 ; user code segment 0x18 | 0x3 ring 3
+	push dword 0x1B ; user code segment 0x18 | 0x3 ring 3
 	push ecx ; push return address
 	iret
-
