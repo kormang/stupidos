@@ -14,8 +14,8 @@
 #define USER_MODE_PROGRAM_ADDRESS 0x10000000 // at 256 MB into virt addr space
 
 volatile task_t* current_task;
-volatile task_t* ready_queue;
-volatile task_t* ready_queue_end;
+volatile task_t* task_queue;
+volatile task_t* task_queue_end;
 
 volatile task_t* next_task;
 
@@ -36,7 +36,9 @@ static virt_addr_t alloc_process_stack() {
     phys_addr_t frame = alloc_frame();
     map_page(frame, addr, 0x7);
   }
-  process_stack_start -= 4;
+  // decrease by at least 4 so that esp points inside stack area
+  // additional bytes are for debug and prevetion (when writting to regs->ss)
+  process_stack_start -= 32;
   return process_stack_start;
 }
 
@@ -69,7 +71,6 @@ static void switch_task_dispatcher() {
   __asm__ volatile ("cli");
   // ensure we run on dispatcher stack
   __asm__ volatile ("mov %0, %%esp" :: "r"(&kernel_dispatcher_stack_start) : "esp");
-
   current_task = next_task;
   current_directory = next_task->page_directory;
 
@@ -81,11 +82,12 @@ static void switch_task_dispatcher() {
 }
 
 void init_tasking() {
-  current_task = ready_queue = ready_queue_end = (task_t*)kmalloc(sizeof(task_t));
+  current_task = task_queue = task_queue_end = (task_t*)kmalloc(sizeof(task_t));
   current_task->id = next_pid++;
   memset((void*)&current_task->registers, 0, sizeof(registers_t));
   current_task->page_directory = current_directory;
   current_task->next = 0;
+  current_task->waiting_input = 0;
   current_task->registers.cs = 0x8; // kernel code
   current_task->registers.ss = 0x10; // kernel data
   current_task->registers.ds = 0x10; // kernel data
@@ -113,11 +115,6 @@ void init_tasking() {
 }
 
 int process_main() {
-  for (int i = 0; i < 5; i++) {
-		screen_print("Hello from another process!!!");
-		screen_print("This is multitasking demo!!! This is one process!!!\n");
-	}
-
   prepare_user_mode_program();
   switch_to_user_mode(USER_MODE_PROGRAM_ADDRESS);
   return 0x1;
@@ -132,7 +129,22 @@ static task_t* find_next_task(task_t* current_task) {
   // it will be preserved after return from ISR
   task_t* next_task = current_task->next;
   if (!next_task) {
-    next_task = (task_t*)ready_queue;
+    next_task = (task_t*)task_queue->next;
+  }
+  while (next_task && next_task->waiting_input) {
+    next_task = next_task->next;
+  }
+  if (!next_task) {
+    return (task_t*)task_queue;
+  }
+  return next_task;
+}
+
+task_t* find_task_waiting(uint32_t what) {
+  // stupid way to find task waiting for some input
+  task_t* next_task = (task_t*)task_queue;
+  while (next_task && !(next_task->waiting_input & what)) {
+      next_task = next_task->next;
   }
   return next_task;
 }
@@ -144,10 +156,10 @@ void on_task_returned() {
   screen_print("Task returned: ");
   screen_print_hex(return_value);
   screen_put_char('\n');
-  task_t* tmp = (task_t*)ready_queue;
+  task_t* tmp = (task_t*)task_queue;
   task_t* prev = 0;
 
-  while (tmp != ready_queue_end && tmp != current_task) {
+  while (tmp != task_queue_end && tmp != current_task) {
     prev = tmp;
     tmp = tmp->next;
   }
@@ -155,21 +167,20 @@ void on_task_returned() {
   if (tmp == current_task) { // it should be
     if (prev == 0) {
       // first task is current task
-      if (tmp != ready_queue_end && tmp->next) {
-        ready_queue = tmp->next;
+      if (tmp != task_queue_end && tmp->next) {
+        task_queue = tmp->next;
       } else {
         screen_print("Task should not finish!");
       }
     } else {
       prev->next = tmp->next;
-      if (tmp == ready_queue_end) {
-        ready_queue_end = prev;
+      if (tmp == task_queue_end) {
+        task_queue_end = prev;
       }
     }
 
     set_next_task(find_next_task(tmp));
     kfree(tmp);
-    screen_print("process is finished\n");
     switch_task_dispatcher();
   } else {
     // this should not happen
@@ -190,6 +201,7 @@ int fork() {
   new_task->id = next_pid++;
   new_task->page_directory = clone_directory(current_directory);
   new_task->next = 0;
+  new_task->waiting_input = 0;
 
   // save eflags
   __asm__ volatile (
@@ -198,7 +210,7 @@ int fork() {
     : "=m"(new_task->registers.eflags)
   );
 
-  new_task->registers.eflags |= 0x200; // set I flag upon wakeup
+  new_task->registers.eflags |= 0x202; // set I flag upon wakeup (+ reserved 1)
   new_task->registers.ds = current_task->registers.ds;
   new_task->registers.ss = current_task->registers.ss;
   new_task->registers.cs = current_task->registers.cs;
@@ -224,8 +236,8 @@ int fork() {
 
   if (current_task == parent_task) {
     new_task->registers.eip = eip;
-    ready_queue_end->next = new_task;
-    ready_queue_end = new_task;
+    task_queue_end->next = new_task;
+    task_queue_end = new_task;
 
     __asm__ volatile ("popf");
     return new_task->id;
@@ -234,12 +246,37 @@ int fork() {
   }
 }
 
+int fork_user(registers_t* regs) {
+  task_t* new_task;
+  new_task = (task_t*)kmalloc(sizeof(task_t));
+  memset(new_task, 0, sizeof(task_t));
+  new_task->id = next_pid++;
+  new_task->page_directory = clone_directory(current_directory);
+  new_task->next = 0;
+  new_task->waiting_input = 0;
+
+  // so we setup registers for new task, which will eventually be woken up
+  // at eip with these values of registers
+  new_task->registers = *regs;
+  regs->eax = new_task->id; // parent wakes up with id as return value
+  new_task->registers.eax = 0; // child wakes up with 0 as return value
+  task_queue_end->next = new_task;
+  task_queue_end = new_task;
+  return new_task->id;
+}
+
+
 // it should be called from interrupt handler,
 // it will return quickly, but will modify ISR return address,
 // so that it points to second part of this function.
 // This second part will efectivelly switch task but outside ISR
 void switch_task_from_isr(registers_t* interrupted_task_regs) {
-  if (!current_task || ready_queue == ready_queue_end) {
+  if (!current_task || task_queue == task_queue_end) {
+    return;
+  }
+
+  task_t* next = find_next_task((task_t*)current_task);
+  if (next == current_task) {
     return;
   }
 
@@ -255,7 +292,7 @@ void switch_task_from_isr(registers_t* interrupted_task_regs) {
       + ( member_offset(registers_t, prev_esp) - member_offset(registers_t, int_no) );
   }
 
-  set_next_task(find_next_task((task_t*)current_task));
+  set_next_task(next);
 
   interrupted_task_regs->eip = switch_task_dispatcher_regs.eip;
   interrupted_task_regs->eflags = switch_task_dispatcher_regs.eflags;
@@ -267,6 +304,7 @@ void switch_task_from_isr(registers_t* interrupted_task_regs) {
     interrupted_task_regs->ss = switch_task_dispatcher_regs.ss;
     interrupted_task_regs->prev_esp = switch_task_dispatcher_regs.prev_esp;
   }
+
   // exit quickly from ISR, but continue with the job in switch_task_dispatched
   return;
 }

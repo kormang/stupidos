@@ -28,4 +28,5 @@ kernel_stack_start:
 resb 0x4000
 global kernel_dispatcher_stack_start
 kernel_dispatcher_stack_start:
+resb 0x20
 

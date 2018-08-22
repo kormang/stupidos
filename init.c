@@ -5,7 +5,7 @@
 #include "keyboard.h"
 #include "paging.h"
 #include "timer.h"
-#include "screen.h"
+#include "syscall.h"
 #include "task.h"
 
 void init_kernel() {
@@ -14,7 +14,8 @@ void init_kernel() {
   init_isrs();
   init_idt();
   init_keyboard();
-  init_timer(18);
+  init_timer(36);
   init_paging();
+  init_syscalls();
   init_tasking();
 }

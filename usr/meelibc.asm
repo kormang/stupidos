@@ -24,8 +24,23 @@ putc:
 	int 0x80
 	ret
 
+global puts
+puts:
+	mov eax, 3
+	mov ecx, [esp + 4]
+	int 0x80
+	ret
+
+global puthex
+puthex:
+	mov eax, 4
+	mov ecx, [esp + 4]
+	int 0x80
+	ret
+
 global fork
 fork:
 	mov eax, 5
 	int 0x80
 	ret
+

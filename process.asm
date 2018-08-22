@@ -156,7 +156,7 @@ switch_to_user_mode:
 	mov eax, esp ; save stack pointer
 	push dword 0x23 ; stack segment selector = data segment
 	push eax ; restore stack after iret
-	pushf ; eflags
+	push dword 0x202 ; eflags: I + reserved 1
 	push dword 0x1B ; user code segment 0x18 | 0x3 ring 3
 	push ecx ; push return address
 	iret

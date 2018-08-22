@@ -11,6 +11,7 @@
 
 #define ISR_COUNT 48
 #define IRQ_COUNT 16
+#define SYSCALL_INT_NO 128
 
 // represent registers pushed by jump to ISR code (assembly0)
 typedef struct registers
@@ -29,6 +30,8 @@ typedef void (*isr_t)(registers_t*);
 
 void init_isrs();
 void register_interrupt_handler(uint8_t irq_num, isr_t isr);
+
+void print_regs(registers_t* regs);
 
 extern void isr0();
 extern void isr1();
@@ -78,6 +81,8 @@ extern void isr44();
 extern void isr45();
 extern void isr46();
 extern void isr47();
+
+extern void isr128();
 
 typedef void (*asm_isr_t)();
 extern asm_isr_t asm_isrs[];

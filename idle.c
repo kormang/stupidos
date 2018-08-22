@@ -3,12 +3,24 @@
 #include "pic.h"
 #include "io.h"
 
-static void blabla(char c) {
-  for (int i = 0; i < 100; ++i) {
-    screen_put_char(c);
-    screen_put_char('\b');
-  }
-}
+// static void blabla(char c) {
+//   for (int i = 0; i < 100; ++i) {
+//     screen_put_char(c);
+//     screen_put_char('\b');
+//   }
+// }
+
+// static void print_waiting_clock() {
+  // blabla('/');
+  // blabla('|');
+  // blabla('\\');
+  // blabla('-');
+  // blabla('/');
+  // blabla('|');
+  // blabla('\\');
+  // blabla('-');
+  // blabla('/');
+// }
 
 void kernel_idle_task() {
 
@@ -20,14 +32,6 @@ void kernel_idle_task() {
 
   screen_print("Starting kernel idle loop.");
   for(;;){
-    blabla('/');
-    blabla('|');
-    blabla('\\');
-    blabla('-');
-    blabla('/');
-    blabla('|');
-    blabla('\\');
-    blabla('-');
-    blabla('/');
+    // print_waiting_clock();
   }
 }

@@ -67,6 +67,7 @@ ISR 44
 ISR 45
 ISR 46
 ISR 47
+ISR 128
 
 extern isr_common_handler
 isr_common_stub:
