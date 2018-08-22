@@ -1,5 +1,5 @@
 
-CFLAGS = -Wall -m32 -fno-pie -fno-stack-protector -I./ -c
+CFLAGS = -Wall -m32 -fno-pie -fno-stack-protector -ffreestanding -I./ -c
 
 CSRCS=$(wildcard *.c)
 CHEADERS=$(wildcard *.h)
@@ -12,8 +12,8 @@ all: boot.bin kernel
 boot.bin: boot.asm
 	nasm boot.asm -f bin -o boot.bin
 
-kernel: kernelasm.o $(ASMOBJS) $(COBJS)
-	ld -m elf_i386 -T link.ld -o kernel kernelasm.o $(ASMOBJS) $(COBJS)
+kernel: kernelasm.o $(ASMOBJS) $(COBJS) usr/program
+	ld -m elf_i386 -T link.ld -o kernel kernelasm.o $(ASMOBJS) $(COBJS) usr/program
 
 %.o: %.c $(CHEADERS)
 	gcc $(CFLAGS) $< -o $@
@@ -30,8 +30,12 @@ processasm.o: process.asm
 gdtasm.o: gdt.asm
 	nasm -f elf32 $< -o $@
 
-.PHONY clean:
+.PHONY: usr/program clean
+
+usr/program:
+	make -C usr/
+
+clean:
 	rm *.o
 	rm kernel
 	rm boot.bin
-

@@ -152,7 +152,7 @@ switch_to_user_mode:
 	mov fs, ax
 	mov gs, ax
 
-	pop ecx ; save return address
+	mov ecx, [esp + 4] ; save return address that is passed as parameter
 	mov eax, esp ; save stack pointer
 	push dword 0x23 ; stack segment selector = data segment
 	push eax ; restore stack after iret
@@ -160,3 +160,4 @@ switch_to_user_mode:
 	push dword 0x1B ; user code segment 0x18 | 0x3 ring 3
 	push ecx ; push return address
 	iret
+

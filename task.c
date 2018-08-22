@@ -8,8 +8,10 @@
 // 0xC0000000 is high enough and it is lower than typical higher-helf kernel address,
 // in case this kernel ever becomes one.
 // Stack grows downwards.
-#define PROCESS_STACK_ADDRESS 0xC0000000
+#define PROCESS_STACK_ADDRESS 0xC0000000 // at 3 GB into virt addr space
 #define PROCESS_STACK_SIZE 0x20000 // 128 kB
+
+#define USER_MODE_PROGRAM_ADDRESS 0x10000000 // at 256 MB into virt addr space
 
 volatile task_t* current_task;
 volatile task_t* ready_queue;
@@ -36,6 +38,27 @@ static virt_addr_t alloc_process_stack() {
   }
   process_stack_start -= 4;
   return process_stack_start;
+}
+
+extern uint8_t binary_program_start;
+extern uint8_t binary_program_end;
+static virt_addr_t alloc_user_mode_program() {
+  virt_addr_t program_start = (virt_addr_t)USER_MODE_PROGRAM_ADDRESS;
+  size_t binary_program_size = &binary_program_end - &binary_program_start;
+  for (virt_addr_t addr = program_start;
+      addr < program_start + binary_program_size;
+      addr += 0x1000) {
+    phys_addr_t frame = alloc_frame();
+    map_page(frame, addr, 0x7);
+  }
+  return program_start;
+}
+
+static void prepare_user_mode_program() {
+  virt_addr_t dst = alloc_user_mode_program();
+  virt_addr_t src = &binary_program_start;
+  size_t size = &binary_program_end - &binary_program_start;
+  memcpy(dst, src, size);
 }
 
 static registers_t switch_task_dispatcher_regs;
@@ -89,21 +112,15 @@ void init_tasking() {
   // other fields are not important
 }
 
-void kernel_idle_task() {
-  screen_print("Starting kernel idle loop.");
-  for(;;){}
-}
-
 int process_main() {
   for (int i = 0; i < 5; i++) {
 		screen_print("Hello from another process!!!");
 		screen_print("This is multitasking demo!!! This is one process!!!\n");
 	}
 
-  switch_to_user_mode();
-
-  for (;;){}
-  return 0x1; // error code
+  prepare_user_mode_program();
+  switch_to_user_mode(USER_MODE_PROGRAM_ADDRESS);
+  return 0x1;
 }
 
 static void set_next_task(task_t* ntask) {
@@ -153,7 +170,7 @@ void on_task_returned() {
     set_next_task(find_next_task(tmp));
     kfree(tmp);
     screen_print("process is finished\n");
-    // TODO: switch to another task
+    switch_task_dispatcher();
   } else {
     // this should not happen
     screen_print("Task finished but wasn't in list.\n");

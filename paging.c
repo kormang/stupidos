@@ -169,7 +169,7 @@ page_directory_t* clone_directory(page_directory_t* src) {
 }
 
 void init_paging() {
-  uint32_t mem_end_page = 0x8000000; // 128 MB
+  uint32_t mem_end_page = 0x10000000; // 256 MB
   frames_count = mem_end_page >> 12;
   frames = kmalloc_a(INDEX_FROM_BIT(frames_count));
   memset(frames, 0, INDEX_FROM_BIT(frames_count));

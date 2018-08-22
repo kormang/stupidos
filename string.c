@@ -7,3 +7,12 @@ void* memset (void* dst, int c, size_t size) {
   }
   return dst;
 }
+
+void* memcpy (void* dst, void* src, size_t size) {
+  char* t = dst;
+  char* s = src;
+  while (size--) {
+    *t++ = *s++;
+  }
+  return dst;
+}
