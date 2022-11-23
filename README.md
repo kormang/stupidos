@@ -15,6 +15,8 @@ I just wanted to go beyond OS theory and tried to implement some of low level OS
 An old laptop was used for testing, no Bochs or other emulators. Yea, that is hard core mazohism. Using only prints, exception handlers, Intel manuals and thinking for debugging purposes.
 But it was fun learning experience! Highly recommended for anyone to try. :D
 
+![](20180826_203725.jpg)
+
 ## Implemented:
 
 * bootloader
